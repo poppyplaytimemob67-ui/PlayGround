@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CORREDOR ESCURO — Terror 3D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Courier New',monospace; color:#cfd8e3;
+    touch-action:none; overscroll-behavior:none; }
+  #gameCanvas { position:fixed; inset:0; display:block; background:#000; }
+  /* Vinheta */
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:5;
+    background:radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,.55) 68%, rgba(0,0,0,.96) 100%); }
+  #damageVignette { position:fixed; inset:0; pointer-events:none; z-index:6; opacity:0; transition:opacity .3s;
+    background:radial-gradient(ellipse at center, transparent 40%, rgba(120,0,0,.55) 100%); }
+  #distort { position:fixed; inset:0; pointer-events:none; z-index:6; opacity:0;
+    background:repeating-linear-gradient(0deg, rgba(180,0,0,.06) 0 2px, transparent 2px 5px);
+    mix-blend-mode:screen; }
+  /* HUD */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:10; display:none; }
+  #crosshair { position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+    background:rgba(255,255,255,.75); border-radius:50%; box-shadow:0 0 4px #000; }
+  #objective { position:absolute; top:12px; left:12px; max-width:min(70vw,420px); background:rgba(0,0,0,.55);
+    border:1px solid #2a3a55; border-left:3px solid #e33; padding:8px 12px; font-size:13px; line-height:1.4; border-radius:4px; }
+  #objective b { color:#fff; }
+  #batteryWrap { position:absolute; top:12px; right:12px; background:rgba(0,0,0,.55); border:1px solid #2a3a55;
+    padding:8px 10px; border-radius:4px; font-size:12px; width:150px; }
+  #batteryBarBg { width:100%; height:10px; background:#1a1a1a; border:1px solid #444; border-radius:3px; margin-top:5px; overflow:hidden; }
+  #batteryBar { height:100%; width:100%; background:linear-gradient(90deg,#7dff8a,#ffe45e); transition:width .3s; }
+  #batteryBar.low { background:linear-gradient(90deg,#ff3b3b,#ff8a00); }
+  #fusesHud { margin-top:6px; font-size:13px; color:#ffd76a; }
+  #interactMsg { position:absolute; left:50%; bottom:26%; transform:translateX(-50%); background:rgba(0,0,0,.7);
+    border:1px solid #9fb6d8; padding:10px 18px; border-radius:4px; font-size:15px; color:#fff; display:none;
+    text-align:center; white-space:nowrap; }
+  #interactMsg span.key { display:inline-block; border:1px solid #fff; padding:1px 8px; margin:0 4px; border-radius:3px; font-weight:bold; }
+  #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); background:rgba(0,0,0,.75);
+    border:1px solid #553; color:#ffe9b0; padding:10px 18px; border-radius:4px; font-size:14px; display:none;
+    max-width:86vw; text-align:center; }
+  #flashHint { position:absolute; bottom:14px; left:12px; font-size:11px; color:#7d8aa0; background:rgba(0,0,0,.4); padding:5px 8px; border-radius:4px;}
+  /* Telas */
+  .screen { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 30%, #0b1220 0%, #04060c 55%, #000 100%); text-align:center; padding:20px; }
+  .screen h1 { font-size:clamp(28px,6vw,58px); letter-spacing:6px; color:#e8eef7; text-shadow:0 0 18px #1e5aff66, 0 0 46px #ff000033; margin-bottom:6px;}
+  .screen h2 { font-size:clamp(12px,2.4vw,16px); letter-spacing:4px; color:#8b98ad; margin-bottom:18px; font-weight:normal;}
+  .screen p.story { max-width:560px; font-size:14px; line-height:1.6; color:#aeb9cc; margin-bottom:18px; }
+  .screen .controls-info { font-size:12px; color:#6f7d93; margin-bottom:20px; line-height:1.8;}
+  .bigbtn { pointer-events:auto; cursor:pointer; font-family:inherit; font-size:20px; letter-spacing:4px; font-weight:bold;
+    color:#fff; background:linear-gradient(180deg,#7a0e0e,#3d0505); border:1px solid #ff4444; padding:14px 56px; border-radius:6px;
+    box-shadow:0 0 24px rgba(255,0,0,.35); transition:transform .1s, box-shadow .2s; }
+  .bigbtn:hover { transform:scale(1.04); box-shadow:0 0 34px rgba(255,0,0,.6); }
+  .bigbtn:disabled { opacity:.5; }
+  #loadMsg { margin-top:14px; font-size:12px; color:#8b98ad; min-height:18px;}
+  #errorBox { display:none; margin-top:14px; max-width:560px; background:#2a0505; border:1px solid #ff5555; color:#ffb0b0;
+    padding:12px; border-radius:4px; font-size:13px; line-height:1.5; }
+  #endTitle.gameover { color:#ff3b3b; text-shadow:0 0 24px rgba(255,0,0,.6);}
+  #endTitle.win { color:#9dffb0; text-shadow:0 0 24px rgba(0,255,120,.4);}
+  #finalScene { font-size:14px; color:#c7d2e4; max-width:560px; line-height:1.7; margin-bottom:18px;}
+  /* Mobile */
+  #mobileUI { position:fixed; inset:0; z-index:20; pointer-events:none; display:none; }
+  #joystick { position:absolute; left:18px; bottom:24px; width:120px; height:120px; border-radius:50%;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.25); pointer-events:auto; }
+  #joyKnob { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
+    background:rgba(255,255,255,.22); border:1px solid rgba(255,255,255,.5); }
+  .mbtn { position:absolute; pointer-events:auto; width:62px; height:62px; border-radius:50%;
+    background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:11px; font-weight:bold;
+    display:flex; align-items:center; justify-content:center; user-select:none; }
+  .mbtn:active { background:rgba(255,255,255,.25); }
+  #btnInteract { right:18px; bottom:110px; border-color:#7dff8a; }
+  #btnFlash { right:96px; bottom:34px; border-color:#ffe45e; }
+  #btnRun { right:18px; bottom:24px; border-color:#5aa9ff; }
+  #lookArea { position:absolute; right:0; top:0; width:55%; height:100%; pointer-events:auto; }
+  @media (max-width:700px){
+    #objective { font-size:11px; max-width:56vw; }
+    #batteryWrap { width:118px; font-size:11px; }
+    #flashHint { display:none; }
+    #interactMsg { font-size:13px; bottom:34%; }
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="vignette"></div>
+<div id="distort"></div>
+<div id="damageVignette"></div>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="objective">OBJETIVO: <b>Encontre 3 fusíveis</b> <span id="objDetail">(0/3)</span></div>
+  <div id="batteryWrap">🔦 BATERIA <span id="batteryPct">100%</span>
+    <div id="batteryBarBg"><div id="batteryBar"></div></div>
+    <div id="fusesHud">🔌 Fusíveis: <span id="fuseCount">0/3</span></div>
+  </div>
+  <div id="interactMsg"></div>
+  <div id="toast"></div>
+  <div id="flashHint">WASD andar • Mouse olhar • E interagir • F lanterna • Shift correr</div>
+</div>
+
+<div id="mobileUI">
+  <div id="lookArea"></div>
+  <div id="joystick"><div id="joyKnob"></div></div>
+  <div class="mbtn" id="btnInteract">USAR</div>
+  <div class="mbtn" id="btnFlash">LUZ</div>
+  <div class="mbtn" id="btnRun">CORRER</div>
+</div>
+
+<div class="screen" id="startScreen">
+  <h1>CORREDOR ESCURO</h1>
+  <h2>PRÉDIO ABANDONADO • 02:47 AM</h2>
+  <p class="story">A energia caiu. Três fusíveis estão espalhados pelos corredores.<br>
+  Encontre-os, restaure o quadro elétrico e fuja pela saída.<br>
+  <span style="color:#ff7b7b">Algo observa você no escuro. Não confie no silêncio.</span></p>
+  <div class="controls-info">🖥️ PC: WASD + Mouse + E (interagir) + F (lanterna) + Shift (correr)<br>📱 Celular: joystick + arrastar p/ olhar + botões</div>
+  <button class="bigbtn" id="playBtn">JOGAR</button>
+  <div id="loadMsg">Use fones de ouvido para melhor experiência 🎧</div>
+  <div id="errorBox"></div>
+</div>
+
+<div class="screen" id="endScreen" style="display:none">
+  <h1 id="endTitle">VOCÊ MORREU</h1>
+  <p id="finalScene"></p>
+  <button class="bigbtn" id="restartBtn">REINICIAR</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+function showError(msg){
+  var box = document.getElementById('errorBox');
+  box.style.display = 'block';
+  box.innerHTML = 'ERRO: ' + msg + '<br>Verifique sua conexão com a internet (Three.js via CDN) e recarregue a página.';
+  var lm = document.getElementById('loadMsg');
+  if(lm) lm.textContent = 'Falha ao carregar recursos. Veja o erro acima.';
+}
+window.addEventListener('error', function(e){
+  if(!window.__gameStarted){
+    showError((e.message||'erro desconhecido') + ' @ ' + (e.filename||'') + ':' + (e.lineno||'?'));
+  }
+});
+
+// ---------- Boot só após JOGAR ----------
+var playBtn = document.getElementById('playBtn');
+var isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+playBtn.addEventListener('click', function(){
+  playBtn.disabled = true;
+  document.getElementById('loadMsg').textContent = 'Carregando...';
+  if(typeof THREE === 'undefined'){
+    // tenta CDN alternativo
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/three@0.128.0/build/three.min.js';
+    s.onload = function(){ startGame(); };
+    s.onerror = function(){ playBtn.disabled=false; showError('Three.js não pôde ser carregado (CDN bloqueado/offline).'); };
+    document.head.appendChild(s);
+  } else {
+    startGame();
+  }
+});
+document.getElementById('restartBtn').addEventListener('click', function(){ location.reload(); });
+
+function startGame(){
+  try{
+    if(typeof THREE === 'undefined'){ showError('Three.js indisponível.'); return; }
+    window.__gameStarted = true;
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+    if(isMobile) document.getElementById('mobileUI').style.display = 'block';
+    initGame();
+  }catch(err){ showError('Falha ao iniciar: ' + err.message); console.error(err); }
+}
+
+// ================= JOGO =================
+function initGame(){
+
+// ---------- Canvas / Renderer ----------
+var canvas = document.getElementById('gameCanvas');
+var renderer;
+try{
+  renderer = new THREE.WebGLRenderer({ canvas:canvas, antialias:false, powerPreference:'low-power' });
+}catch(e){ showError('WebGL indisponível neste navegador: '+e.message); return; }
+var isLowEnd = isMobile;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, isLowEnd?1:1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030509);
+scene.fog = new THREE.FogExp2(0x04060b, 0.075);
+
+var camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 120);
+camera.rotation.order = 'YXZ';
+
+window.addEventListener('resize', function(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- ÁUDIO procedural (sem arquivos externos) ----------
+var AC = null, masterGain=null, ambientNodes=[];
+function initAudio(){
+  try{
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+    masterGain = AC.createGain(); masterGain.gain.value = 0.6; masterGain.connect(AC.destination);
+    // Drone ambiente: 2 osciladores graves + ruído filtrado
+    var o1 = AC.createOscillator(); o1.type='sine'; o1.frequency.value=48;
+    var o2 = AC.createOscillator(); o2.type='sine'; o2.frequency.value=51.5;
+    var g = AC.createGain(); g.gain.value=0.05;
+    o1.connect(g); o2.connect(g); g.connect(masterGain); o1.start(); o2.start();
+    ambientNodes.push(o1,o2);
+    // Vento / ruído marrom filtrado
+    var buf = AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate);
+    var d = buf.getChannelData(0), last=0;
+    for(var i=0;i<d.length;i++){ var w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.2; }
+    var src = AC.createBufferSource(); src.buffer=buf; src.loop=true;
+    var f = AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420;
+    var ng = AC.createGain(); ng.gain.value=0.05;
+    src.connect(f); f.connect(ng); ng.connect(masterGain); src.start();
+    // LFO assustador modulando o filtro
+    var lfo = AC.createOscillator(); lfo.frequency.value=0.07;
+    var lg = AC.createGain(); lg.gain.value=220; lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+  }catch(e){ console.warn('audio off', e); }
+}
+function noiseBurst(dur, freq, vol, type){
+  if(!AC) return;
+  try{
+    var n = Math.floor(AC.sampleRate*dur);
+    var buf = AC.createBuffer(1, n, AC.sampleRate);
+    var ch = buf.getChannelData(0);
+    for(var i=0;i<n;i++) ch[i]=(Math.random()*2-1)*(1-i/n);
+    var s = AC.createBufferSource(); s.buffer=buf;
+    var fl = AC.createBiquadFilter(); fl.type=type||'bandpass'; fl.frequency.value=freq||800;
+    var g = AC.createGain(); g.gain.value=vol||0.25;
+    s.connect(fl); fl.connect(g); g.connect(masterGain); s.start();
+  }catch(e){}
+}
+function tone(freq, dur, vol, type, slideTo){
+  if(!AC) return;
+  try{
+    var o=AC.createOscillator(), g=AC.createGain();
+    o.type=type||'sine'; o.frequency.value=freq;
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, AC.currentTime+dur);
+    g.gain.setValueAtTime(vol||0.15, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+dur);
+    o.connect(g); g.connect(masterGain); o.start(); o.stop(AC.currentTime+dur+0.05);
+  }catch(e){}
+}
+function footstep(run){
+  noiseBurst(0.09, run?300:220, run?0.30:0.18, 'lowpass');
+}
+function scareSound(kind){
+  if(kind==='whisper'){ noiseBurst(1.2, 2500, 0.12, 'highpass'); tone(800,1.0,0.04,'sine',300); }
+  else if(kind==='bang'){ noiseBurst(0.5, 120, 0.5, 'lowpass'); tone(70,0.6,0.3,'sine',35); }
+  else if(kind==='behind'){ noiseBurst(0.4, 500, 0.3); tone(200,0.8,0.1,'sawtooth',90); }
+  else if(kind==='chase'){ tone(110,0.9,0.25,'sawtooth',55); noiseBurst(0.7,200,0.4,'lowpass'); }
+  else if(kind==='pickup'){ tone(660,0.15,0.12,'square'); setTimeout(function(){tone(990,0.2,0.12,'square');},120); }
+  else if(kind==='power'){ tone(120,1.2,0.2,'sawtooth',480); noiseBurst(1.0,300,0.2,'lowpass'); }
+  else { noiseBurst(0.8, 900, 0.2); }
+}
+
+// ---------- MATERIAIS ----------
+var matWall = new THREE.MeshLambertMaterial({ color:0x5a6068 });
+var matWallDark = new THREE.MeshLambertMaterial({ color:0x3c4148 });
+var matFloor = new THREE.MeshLambertMaterial({ color:0x2b2e33 });
+var matCeil = new THREE.MeshLambertMaterial({ color:0x1a1d22 });
+var matDoor = new THREE.MeshLambertMaterial({ color:0x4a3521 });
+var matMetal = new THREE.MeshLambertMaterial({ color:0x39424e });
+var matPaper = new THREE.MeshLambertMaterial({ color:0x9a958a });
+var matBlood = new THREE.MeshLambertMaterial({ color:0x4d0a0a });
+
+// ---------- MAPA / COLISÃO ----------
+var colliders = []; // {minX,maxX,minZ,maxZ}
+var interactables = [];
+var flickerLights = [];
+var moveableProps = [];
+
+function addCollider(x,z,w,d){ colliders.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2}); }
+function addWall(x,z,w,d,h,mat){
+  h = h||3.2;
+  var g = new THREE.BoxGeometry(w,h,d);
+  var m = new THREE.Mesh(g, mat||matWall);
+  m.position.set(x,h/2,z);
+  m.receiveShadow = true;
+  scene.add(m);
+  addCollider(x,z,w,d);
+  return m;
+}
+function addProp(mesh, x,z, collide){
+  mesh.position.x=x; mesh.position.z=z;
+  scene.add(mesh);
+  if(collide){ 
+    var b=new THREE.Box3().setFromObject(mesh);
+    addCollider((b.min.x+b.max.x)/2,(b.min.z+b.max.z)/2, Math.max(0.3,b.max.x-b.min.x), Math.max(0.3,b.max.z-b.min.z));
+  }
+  return mesh;
+}
+
+var W=44, D=30; // tamanho do prédio
+// Chão e teto
+(function(){
+  var fg = new THREE.PlaneGeometry(W,D);
+  var floor = new THREE.Mesh(fg, matFloor);
+  floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+  var ceil = new THREE.Mesh(fg, matCeil);
+  ceil.rotation.x=Math.PI/2; ceil.position.y=3.2; scene.add(ceil);
+  // grade suja no chão (linhas)
+  var grid = new THREE.GridHelper(Math.max(W,D), 22, 0x11151c, 0x141a24);
+  grid.position.y=0.01; scene.add(grid);
+})();
+
+// Paredes externas
+addWall(0,-D/2,W,0.6,3.4,matWallDark);
+addWall(0, D/2,W,0.6,3.4,matWallDark);
+addWall(-W/2,0,0.6,D,3.4,matWallDark);
+addWall( W/2,0,0.6,D,3.4,matWallDark);
+
+// Corredor central horizontal em z=0 (largura 4). Paredes internas com aberturas (portas)
+function wallSeg(x,z,w,d){ return addWall(x,z,w,d,3.2, (Math.random()<0.5?matWall:matWallDark)); }
+// paredes do corredor (z=-2 e z=+2), com vãos
+var segs = [
+  // topo corredor z=-2
+  {x:-16,z:-2,w:10,d:0.4},{x:-4,z:-2,w:6,d:0.4},{x:6,z:-2,w:8,d:0.4},{x:17,z:-2,w:8,d:0.4},
+  // base corredor z=2
+  {x:-16,z:2,w:10,d:0.4},{x:-4,z:2,w:6,d:0.4},{x:6,z:2,w:8,d:0.4},{x:17,z:2,w:8,d:0.4},
+  // divisórias verticais quartos norte
+  {x:-11,z:-8.5,w:0.4,d:13},{x:-1,z:-8.5,w:0.4,d:13},{x:10,z:-8.5,w:0.4,d:13},
+  // divisórias verticais quartos sul
+  {x:-11,z:8.5,w:0.4,d:13},{x:-1,z:8.5,w:0.4,d:13},{x:10,z:8.5,w:0.4,d:13},
+  // fundo norte e sul (meio)
+  {x:-5.5,z:-14.5,w:11.4,d:0.4},{x:5,z:-14.5,w:12,d:0.4},
+  {x:-5.5,z:14.5,w:11.4,d:0.4},{x:5,z:14.5,w:12,d:0.4},
+];
+segs.forEach(function(s){ wallSeg(s.x,s.z,s.w,s.d); });
+
+// ---------- JANELAS + LUA ----------
+var moonLight = new THREE.DirectionalLight(0x8fb4ff, 0.22);
+moonLight.position.set(-20,28,-18);
+scene.add(moonLight);
+(function(){
+  // céu: lua emissiva + estrelas simples
+  var moon = new THREE.Mesh(new THREE.SphereGeometry(1.6,12,12),
+    new THREE.MeshBasicMaterial({color:0xe8f1ff, fog:false}));
+  moon.position.set(-30,26,-40); scene.add(moon);
+  var glow = new THREE.Mesh(new THREE.SphereGeometry(2.4,12,12),
+    new THREE.MeshBasicMaterial({color:0x4a6da8, transparent:true, opacity:0.35, fog:false}));
+  glow.position.copy(moon.position); scene.add(glow);
+  // janelas quebradas na parede norte (luz azul entrando)
+  for(var i=-2;i<=2;i++){
+    var wx = i*8;
+    var frame = new THREE.Mesh(new THREE.BoxGeometry(2.2,1.4,0.15), matMetal);
+    frame.position.set(wx,1.9,-D/2+0.35); scene.add(frame);
+    var glass = new THREE.Mesh(new THREE.PlaneGeometry(2.0,1.2),
+      new THREE.MeshBasicMaterial({color:0x0e1a33, transparent:true, opacity:0.75}));
+    glass.position.set(wx,1.9,-D/2+0.42); scene.add(glass);
+    // tábuas cruzadas
+    var plank = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.18,0.08), matDoor);
+    plank.position.set(wx,1.9,-D/2+0.5); plank.rotation.z=0.4; scene.add(plank);
+    var plank2 = plank.clone(); plank2.rotation.z=-0.35; scene.add(plank2);
+    // facho da lua
+    var beam = new THREE.Mesh(new THREE.PlaneGeometry(2,7),
+      new THREE.MeshBasicMaterial({color:0x3a5f9e, transparent:true, opacity:0.10, side:THREE.DoubleSide, depthWrite:false}));
+    beam.position.set(wx,1.2,-D/2+3.5); beam.rotation.x=-0.6; scene.add(beam);
+  }
+})();
+
+// ---------- LUZES ----------
+scene.add(new THREE.AmbientLight(0x223349, 0.35));
+var hemi = new THREE.HemisphereLight(0x1c2b4a, 0x05060a, 0.25); scene.add(hemi);
+
+// Lâmpadas piscando do corredor (poucas por desempenho)
+function makeLamp(x,z,color,intensity,flicker){
+  var grp = new THREE.Group();
+  var cord = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.6), matMetal);
+  cord.position.y=2.9; grp.add(cord);
+  var bulbMat = new THREE.MeshBasicMaterial({color: color||0xffd9a0});
+  var bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09,8,8), bulbMat);
+  bulb.position.y=2.55; grp.add(bulb);
+  var pt = new THREE.PointLight(color||0xffc37a, intensity||0.9, 13, 2);
+  pt.position.y=2.45; grp.add(pt);
+  grp.position.set(x,0,z);
+  scene.add(grp);
+  if(flicker) flickerLights.push({light:pt, bulb:bulbMat, base:intensity||0.9, t:Math.random()*10, mode:flicker});
+  return grp;
+}
+makeLamp(-14,0,0xffc37a,0.85,'flicker');
+makeLamp(0,0,0xffc37a,0.7,'unstable');
+makeLamp(14,0,0xff4444,1.0,'steady'); // emergência vermelha
+makeLamp(-6,-8,0x9db8ff,0.5,'flicker');
+makeLamp(6,8,0x9db8ff,0.45,'unstable');
+var red2 = new THREE.PointLight(0xff2222, 0.8, 16, 2); red2.position.set(-19,2.6,0); scene.add(red2);
+flickerLights.push({light:red2, base:0.8, t:0, mode:'pulse'});
+
+// ---------- PORTAS ----------
+var doors=[];
+function makeDoor(x,z,rotY,label){
+  var pivot = new THREE.Group(); pivot.position.set(x,0,z); pivot.rotation.y=rotY||0;
+  var mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2,2.4,0.12), matDoor.clone());
+  mesh.position.set(0.6,1.2,0); mesh.castShadow=true;
+  pivot.add(mesh); scene.add(pivot);
+  var d = { pivot:pivot, mesh:mesh, open:false, opening:false, x:x, z:z, label:label||'Porta',
+    pos:new THREE.Vector3(x,1.2,z) };
+  interactables.push({ type:'door', ref:d, pos:d.pos, radius:2.6, text:'Abrir porta' });
+  doors.push(d);
+  return d;
+}
+makeDoor(-8.5,-2,0,'Porta'); makeDoor(1.5,-2,0,'Porta'); makeDoor(11,-2,0,'Porta');
+makeDoor(-8.5,2,Math.PI,'Porta'); makeDoor(1.5,2,Math.PI,'Porta'); makeDoor(11,2,Math.PI,'Porta');
+makeDoor(21.4,0,Math.PI/2,'Saída'); // saída leste (trancada até energia)
+
+// ---------- OBJETOS ESPALHADOS ----------
+var boxGeo = new THREE.BoxGeometry(1,1,1);
+function debris(x,z){
+  var s = 0.15+Math.random()*0.45;
+  var m = new THREE.Mesh(boxGeo, Math.random()<0.2?matPaper:(Math.random()<0.15?matBlood:matWallDark));
+  m.scale.set(s,s*0.7,s);
+  m.position.set(x,s*0.3,z);
+  m.rotation.y=Math.random()*Math.PI;
+  m.castShadow=false; m.receiveShadow=true;
+  scene.add(m);
+  if(Math.random()<0.18){ moveableProps.push({mesh:m, home:{x:x,z:z}, t:Math.random()*100}); }
+  return m;
+}
+for(var di=0; di<70; di++){
+  var dx=(Math.random()-0.5)*(W-3), dz;
+  if(Math.random()<0.5) dz=(Math.random()-0.5)*3; // corredor
+  else dz=(Math.random()-0.5)*(D-4);
+  debris(dx,dz);
+}
+// mesas/camas simples (cadeiras tombadas, camas)
+function furniture(x,z,w,d,h,color){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color:color||0x333a44}));
+  m.position.set(x,h/2,z); m.castShadow=true; scene.add(m);
+  addCollider(x,z,w,d);
+}
+furniture(-16,-10,2.4,1.0,0.7,0x2e3540); furniture(-15,-6,1,1,0.5);
+furniture(4,-10,2.4,1.0,0.7,0x2e3540); furniture(-5,10,2.4,1.0,0.7,0x2e3540);
+furniture(15,10,1.8,0.9,0.8,0x3a2f28); furniture(15,-10,1.8,0.9,0.8,0x3a2f28);
+
+// papéis / evento: objeto que ativa terror
+function scaryTrigger(x,z,msg){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.5,0.05), matPaper);
+  m.position.set(x,1.5,z); scene.add(m);
+  interactables.push({type:'scare', pos:new THREE.Vector3(x,1.2,z), radius:2.2, text:'Examinar', msg:msg, mesh:m, used:false});
+}
+scaryTrigger(-16, -12, 'O bilhete diz: "NÃO OLHE PARA ELE. APAGUE A LUZ."');
+scaryTrigger(4.5, -12, 'Diário: "Dia 12 — ele imita passos. Dia 13 — ele imita a minha voz."');
+scaryTrigger(15, 12, 'Foto rasgada de uma equipe de manutenção. Um rosto foi riscado... todos os rostos.');
+
+// ---------- FUSÍVEIS ----------
+var fuseMeshes=[];
+function makeFuse(x,z){
+  var g=new THREE.Group();
+  var body=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.35,8),
+    new THREE.MeshLambertMaterial({color:0xb8a23a, emissive:0x664d00}));
+  body.rotation.z=Math.PI/2; g.add(body);
+  var glowM=new THREE.Mesh(new THREE.SphereGeometry(0.07,8,8), new THREE.MeshBasicMaterial({color:0xffe45e}));
+  glowM.position.y=0.28; g.add(glowM);
+  var pt=new THREE.PointLight(0xffd94d,0.7,4,2); pt.position.y=0.4; g.add(pt);
+  g.position.set(x,0.5,z); scene.add(g);
+  var f={mesh:g, light:pt, taken:false, pos:new THREE.Vector3(x,0.6,z)};
+  fuseMeshes.push(f);
+  interactables.push({type:'fuse', ref:f, pos:f.pos, radius:2.4, text:'Pegar fusível'});
+  return f;
+}
+// espalhados: quarto noroeste, quarto sudeste, quarto nordeste
+makeFuse(-16.5,-13);
+makeFuse(5,13);
+makeFuse(15.5,-13);
+
+// Baterias extras
+function makeBattery(x,z){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.28,0.12),
+    new THREE.MeshLambertMaterial({color:0x2fae5f, emissive:0x0a3d1e}));
+  m.position.set(x,0.35,z); scene.add(m);
+  interactables.push({type:'battery', pos:new THREE.Vector3(x,0.4,z), radius:2.2, text:'Pegar bateria', mesh:m, used:false});
+}
+makeBattery(-6,0.8); makeBattery(12,-7);
+
+// ---------- QUADRO ELÉTRICO + SAÍDA ----------
+var panelPos = new THREE.Vector3(-20.5,1.4,4);
+(function(){
+  var box=new THREE.Mesh(new THREE.BoxGeometry(1.1,1.4,0.25), matMetal);
+  box.position.set(-21.4,1.5,4); scene.add(box);
+  var l=new THREE.PointLight(0xff3333,0.5,5,2); l.position.set(-20.5,1.6,4.4); scene.add(l);
+  flickerLights.push({light:l, base:0.5, t:0, mode:'pulse'});
+  interactables.push({type:'panel', pos:panelPos, radius:2.8, text:'Usar quadro elétrico'});
+})();
+var exitPos = new THREE.Vector3(21.2,1.2,0);
+var powerOn=false;
+(function(){
+  var frame=new THREE.Mesh(new THREE.BoxGeometry(0.4,2.6,2.2), matMetal);
+  frame.position.set(21.6,1.3,0); scene.add(frame);
+  var doorM=new THREE.Mesh(new THREE.BoxGeometry(0.15,2.3,1.6), new THREE.MeshLambertMaterial({color:0x1d3a24}));
+  doorM.position.set(21.35,1.25,0); scene.add(doorM);
+  window.__exitDoor = doorM;
+  var sign=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.3,0.05),
+    new THREE.MeshBasicMaterial({color:0xff2222}));
+  sign.position.set(21.3,2.75,0); sign.rotation.y=-Math.PI/2; scene.add(sign);
+  interactables.push({type:'exit', pos:exitPos, radius:3.0, text:'Abrir saída'});
+})();
+
+// ---------- LANTERNA (spot na câmera) ----------
+var flash = new THREE.SpotLight(0xfff2d8, 1.6, 26, 0.46, 0.45, 1.2);
+flash.castShadow = true;
+flash.shadow.mapSize.width = 512; flash.shadow.mapSize.height = 512;
+flash.shadow.camera.near=0.2; flash.shadow.camera.far=26;
+scene.add(flash); scene.add(flash.target);
+var flashOn=true, battery=100;
+var lampGlow = new THREE.PointLight(0xfff2d8, 0.12, 3, 2); scene.add(lampGlow);
+
+// ---------- MONSTRO ----------
+var monster = new THREE.Group();
+var mBody, mHead, eyeL, eyeR;
+(function(){
+  var skin = new THREE.MeshLambertMaterial({color:0x0c0c0e});
+  mBody = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.36,1.5,8), skin);
+  mBody.position.y=1.15; monster.add(mBody);
+  mHead = new THREE.Mesh(new THREE.SphereGeometry(0.24,10,10), skin);
+  mHead.position.y=2.1; mHead.scale.y=1.35; monster.add(mHead);
+  var armG=new THREE.CylinderGeometry(0.07,0.05,1.3,6);
+  var aL=new THREE.Mesh(armG,skin); aL.position.set(-0.42,1.25,0); aL.rotation.z=0.15; monster.add(aL);
+  var aR=new THREE.Mesh(armG,skin); aR.position.set(0.42,1.25,0); aR.rotation.z=-0.15; monster.add(aR);
+  var legG=new THREE.CylinderGeometry(0.09,0.07,0.9,6);
+  var lL=new THREE.Mesh(legG,skin); lL.position.set(-0.14,0.45,0); monster.add(lL);
+  var lR=new THREE.Mesh(legG,skin); lR.position.set(0.14,0.45,0); monster.add(lR);
+  var eyeG=new THREE.SphereGeometry(0.045,8,8);
+  var eyeM=new THREE.MeshBasicMaterial({color:0xffeeaa});
+  eyeL=new THREE.Mesh(eyeG,eyeM); eyeL.position.set(-0.08,2.14,0.19); monster.add(eyeL);
+  eyeR=new THREE.Mesh(eyeG,eyeM); eyeR.position.set(0.08,2.14,0.19); monster.add(eyeR);
+  monster.visible=false;
+  scene.add(monster);
+})();
+var monsterState='hidden'; // hidden|stalk|chase|gone
+var monsterTimer=0, stareTimer=0, flashOnMonster=0, monsterSpeed=2.6;
+var monsterActive=false; // só depois de 50s ou 1 fusível
+var monsterPos=new THREE.Vector3(10,0,-10);
+var monstLight=new THREE.PointLight(0xff0000,0.0,6,2); scene.add(monstLight);
+
+// ---------- JOGADOR ----------
+var player={ x:-19, z:8, y:1.62, yaw:Math.PI*0.75, pitch:0, vx:0, vz:0, bob:0, stamina:1, dead:false, won:false };
+camera.position.set(player.x,player.y,player.z);
+
+var keys={};
+window.addEventListener('keydown',function(e){
+  keys[e.code]=true;
+  if(e.code==='KeyE') tryInteract();
+  if(e.code==='KeyF') toggleFlash();
+  if(['ArrowUp','ArrowDown','Space'].indexOf(e.code)>=0) e.preventDefault();
+});
+window.addEventListener('keyup',function(e){ keys[e.code]=false; });
+
+// Mouse look (pointer lock)
+var locked=false;
+canvas.addEventListener('click',function(){
+  if(!player.dead && !player.won && !isMobile){ canvas.requestPointerLock && canvas.requestPointerLock(); }
+});
+document.addEventListener('pointerlockchange',function(){ locked=(document.pointerLockElement===canvas); });
+document.addEventListener('mousemove',function(e){
+  if(locked && !player.dead){
+    player.yaw -= e.movementX*0.0023;
+    player.pitch -= e.movementY*0.0023;
+    player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));
+  }
+});
+
+// ---------- Mobile: joystick + olhar + botões ----------
+var joy={x:0,y:0}, runHeld=false;
+(function(){
+  var js=document.getElementById('joystick'), knob=document.getElementById('joyKnob');
+  var joyId=null;
+  function setKnob(dx,dy){ knob.style.transform='translate('+dx+'px,'+dy+'px)'; }
+  js.addEventListener('touchstart',function(e){ e.preventDefault(); joyId=e.changedTouches[0].identifier; },{passive:false});
+  window.addEventListener('touchmove',function(e){
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(t.identifier===joyId){
+        var r=js.getBoundingClientRect();
+        var dx=t.clientX-(r.left+r.width/2), dy=t.clientY-(r.top+r.height/2);
+        var m=Math.hypot(dx,dy), max=44;
+        if(m>max){ dx*=max/m; dy*=max/m; }
+        setKnob(dx,dy);
+        joy.x=dx/max; joy.y=dy/max;
+      }
+    }
+  },{passive:true});
+  window.addEventListener('touchend',function(e){
+    for(var i=0;i<e.changedTouches.length;i++){
+      if(e.changedTouches[i].identifier===joyId){ joyId=null; joy.x=0; joy.y=0; setKnob(0,0); }
+    }
+  });
+  var look=document.getElementById('lookArea'), lastX=0,lastY=0, lookId=null;
+  look.addEventListener('touchstart',function(e){
+    var t=e.changedTouches[0]; lookId=t.identifier; lastX=t.clientX; lastY=t.clientY; e.preventDefault();
+  },{passive:false});
+  look.addEventListener('touchmove',function(e){
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      if(t.identifier===lookId){
+        player.yaw -= (t.clientX-lastX)*0.005;
+        player.pitch -= (t.clientY-lastY)*0.005;
+        player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));
+        lastX=t.clientX; lastY=t.clientY;
+      }
+    }
+    e.preventDefault();
+  },{passive:false});
+  look.addEventListener('touchend',function(e){
+    for(var i=0;i<e.changedTouches.length;i++) if(e.changedTouches[i].identifier===lookId) lookId=null;
+  });
+  function bindBtn(id,down,up){
+    var el=document.getElementById(id);
+    el.addEventListener('touchstart',function(e){e.preventDefault();down();},{passive:false});
+    el.addEventListener('touchend',function(e){e.preventDefault();up&&up();},{passive:false});
+    el.addEventListener('mousedown',down); el.addEventListener('mouseup',function(){up&&up();});
+  }
+  bindBtn('btnInteract',function(){tryInteract();});
+  bindBtn('btnFlash',function(){toggleFlash();});
+  bindBtn('btnRun',function(){runHeld=true;},function(){runHeld=false;});
+})();
+
+function toggleFlash(){
+  if(battery<=0 && !flashOn){ toast('Bateria esgotada! Encontre uma bateria.'); return; }
+  flashOn=!flashOn;
+  noiseBurst(0.08, 1800, 0.12, 'highpass');
+  toast(flashOn?'Lanterna LIGADA':'Lanterna DESLIGADA');
+}
+
+// ---------- HUD helpers ----------
+var toastTimer=null;
+function toast(msg, ms){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){el.style.display='none';}, ms||2600);
+}
+function setObjective(html){ document.getElementById('objective').innerHTML='OBJETIVO: '+html; }
+var fuseCount=0;
+function updateFuseHud(){
+  document.getElementById('fuseCount').textContent=fuseCount+'/3';
+  document.getElementById('objDetail') && 0;
+}
+
+// ---------- INTERAÇÃO ----------
+var nearest=null;
+function findNearest(){
+  var best=null, bd=1e9;
+  var px=player.x, pz=player.z;
+  for(var i=0;i<interactables.length;i++){
+    var it=interactables[i];
+    if(it.disabled||it.used) continue;
+    if(it.type==='fuse' && it.ref.taken) continue;
+    var dx=it.pos.x-px, dz=it.pos.z-pz;
+    var d=Math.hypot(dx,dz);
+    if(d<it.radius && d<bd){ bd=d; best=it; }
+  }
+  return best?{it:best,dist:bd}:null;
+}
+function tryInteract(){
+  if(player.dead||player.won) return;
+  var n=findNearest();
+  if(!n) return;
+  var it=n.it;
+  if(it.type==='door'){
+    var d=it.ref;
+    if(d.label==='Saída') return tryExit();
+    d.open=!d.open; d.opening=true;
+    noiseBurst(0.35, 300, 0.3, 'lowpass');
+    // 15% de susto: luz pisca + som
+    if(Math.random()<0.15){ scareSound('bang'); shake(0.5); }
+  }
+  else if(it.type==='fuse'){
+    it.ref.taken=true; it.ref.mesh.visible=false; it.ref.light.intensity=0;
+    fuseCount++;
+    scareSound('pickup');
+    document.getElementById('fuseCount').textContent=fuseCount+'/3';
+    if(!monsterActive && fuseCount>=1){ monsterActive=true; toast('Você ouviu algo se movendo...'); }
+    else toast('Fusível coletado ('+fuseCount+'/3)');
+    if(fuseCount>=3) setObjective('<b>Leve os fusíveis ao QUADRO ELÉTRICO</b> (oeste)');
+    else setObjective('<b>Encontre 3 fusíveis</b> <span id="objDetail">('+fuseCount+'/3)</span>');
+  }
+  else if(it.type==='battery'){
+    it.used=true; it.disabled=true; if(it.mesh) it.mesh.visible=false;
+    battery=Math.min(100,battery+55);
+    toast('Bateria recarregada (+55%)');
+    noiseBurst(0.15,2200,0.15,'highpass');
+  }
+  else if(it.type==='panel'){
+    if(fuseCount<3){ toast('Faltam fusíveis ('+fuseCount+'/3). O quadro precisa de 3.'); tone(150,0.4,0.15,'square'); return; }
+    if(powerOn){ toast('Energia já restaurada. FUJA pela SAÍDA (leste)!'); return; }
+    powerOn=true;
+    scareSound('power');
+    shake(0.8);
+    // acende tudo
+    scene.add(new THREE.PointLight(0xbfd4ff, 0.7, 40, 1).translateX(0).translateY(2.8).translateZ(0));
+    flickerLights.forEach(function(fl){ fl.base=Math.max(fl.base,0.9); });
+    setObjective('<b style="color:#9dffb0">FUJA pela SAÍDA (leste)!</b>');
+    toast('ENERGIA RESTAURADA! Corra para a saída!', 4000);
+    // monstro fica agressivo
+    monsterActive=true;
+    if(monsterState==='hidden'){ spawnMonster('stalk'); }
+  }
+  else if(it.type==='exit'){ tryExit(); }
+  else if(it.type==='scare'){
+    it.used=true;
+    toast(it.msg, 4200);
+    scareSound('whisper');
+    shake(0.6);
+    // objeto voa um pouco
+    if(it.mesh){ it.mesh.position.y=0.4; it.mesh.rotation.z=1.2; }
+    // às vezes invoca observação
+    if(Math.random()<0.4 && monsterActive && monsterState==='hidden'){ spawnMonster('stalk'); }
+  }
+}
+function tryExit(){
+  if(!powerOn){ toast('A saída está TRANCADA. Restaure a energia primeiro.'); tone(140,0.5,0.15,'square',90); return; }
+  winGame();
+}
+
+// ---------- MONSTRO IA ----------
+function spawnMonster(mode){
+  // nasce longe do jogador
+  var spots=[{x:14,z:-12},{x:-14,z:-12},{x:14,z:12},{x:0,z:-12},{x:8,z:0}];
+  var best=spots[0], bd=-1;
+  spots.forEach(function(s){
+    var d=Math.hypot(s.x-player.x,s.z-player.z);
+    if(d>bd && d>8){bd=d;best=s;}
+  });
+  monsterPos.set(best.x,0,best.z);
+  monster.position.copy(monsterPos);
+  monster.visible=true;
+  monsterState = mode||'stalk';
+  monsterTimer=0; stareTimer=0; flashOnMonster=0;
+  if(mode==='chase'){ scareSound('chase'); toast('CORRA!',2000); }
+}
+function updateMonster(dt, elapsed){
+  if(!monsterActive) return;
+  if(monsterState==='hidden'){
+    // aparições raras: a cada ~25-45s
+    monsterTimer+=dt;
+    var interval = powerOn?14:30;
+    if(monsterTimer>interval && elapsed>20){
+      monsterTimer=0;
+      if(Math.random()<0.7) spawnMonster('stalk');
+      else spawnMonster('chase');
+    }
+    return;
+  }
+  var dx=player.x-monsterPos.x, dz=player.z-monsterPos.z;
+  var dist=Math.hypot(dx,dz);
+  // olha para jogador
+  monster.lookAt(player.x,0,player.z);
+  // flutuação assustadora
+  monster.position.y = Math.sin(elapsed*7)*0.03;
+  mHead.rotation.z = Math.sin(elapsed*1.7)*0.18;
+  // olhos piscam
+  var blink = (Math.sin(elapsed*3.1)>0.97)?0.1:1;
+  eyeL.scale.setScalar(blink); eyeR.scale.setScalar(blink);
+
+  // detecta lanterna apontada p/ monstro
+  var toM = new THREE.Vector3(monsterPos.x-player.x, 0, monsterPos.z-player.z).normalize();
+  var fwd = new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);
+  fwd.y=0; fwd.normalize();
+  var aimed = (toM.dot(fwd) > 0.92) && flashOn && dist<16;
+  if(aimed) flashOnMonster+=dt; else flashOnMonster=Math.max(0,flashOnMonster-dt*2);
+
+  if(monsterState==='stalk'){
+    stareTimer+=dt;
+    // em stalk, fica parado observando (leve flutuação), as vezes some sozinho
+    if(flashOnMonster>1.4){
+      disappearMonster(); toast('Ele sumiu...'); noiseBurst(0.6,3000,0.1,'highpass');
+      return;
+    }
+    if(stareTimer>7+Math.random()*4){
+      // 50% some, 50% persegue (mais chance se energia ligada ou bateria fraca)
+      var chaseP = powerOn?0.65:(battery<30?0.55:0.3);
+      if(Math.random()<chaseP){ monsterState='chase'; scareSound('chase'); toast('ELE ESTÁ VINDO!',1800); }
+      else disappearMonster();
+      stareTimer=0;
+    }
+    // sussurros aleatórios
+    if(Math.random()<dt*0.06) scareSound('whisper');
+  }
+  else if(monsterState==='chase'){
+    var sp = powerOn?3.4:2.7;
+    // jogador correndo é um pouco mais rápido; monstro desiste se muito longe por muito tempo
+    var nx=dx/(dist||1), nz=dz/(dist||1);
+    var npx=monsterPos.x+nx*sp*dt, npz=monsterPos.z+nz*sp*dt;
+    if(!collides(npx,npz,0.4)){ monsterPos.x=npx; monsterPos.z=npz; }
+    monster.position.set(monsterPos.x, monster.position.y, monsterPos.z);
+    monstLight.position.set(monsterPos.x,2,monsterPos.z);
+    monstLight.intensity=0.6+Math.sin(elapsed*9)*0.3;
+    // passos do monstro
+    if(Math.random()<dt*6) noiseBurst(0.12,150,0.25,'lowpass');
+    // pego!
+    if(dist<1.1){ die('Ele estava bem atrás de você. A lanterna apagou por um segundo — foi o suficiente.'); return; }
+    // some se iluminado por 2.2s OU se jogador fugiu (>18m por 6s)
+    if(flashOnMonster>2.2){ disappearMonster(); toast('A luz o expulsou... por enquanto.'); return; }
+    monsterTimer+=dt;
+    if(dist>18 && monsterTimer>6){ disappearMonster(); return; }
+    if(monsterTimer>25){ disappearMonster(); return; } // não persegue p/ sempre
+  }
+  // tremor de câmera + distorção pela proximidade
+  var prox = Math.max(0, 1 - dist/14);
+  document.getElementById('distort').style.opacity = (monsterState==='chase'?0.5+prox*0.5:prox*0.55).toFixed(2);
+  document.getElementById('damageVignette').style.opacity = (prox*0.8).toFixed(2);
+  if(dist<9 && Math.random()<dt*2) scareSound('behind');
+}
+function disappearMonster(){
+  monster.visible=false; monsterState='hidden'; monsterTimer=-8-Math.random()*10; // cooldown
+  monstLight.intensity=0;
+  document.getElementById('distort').style.opacity=0;
+  document.getElementById('damageVignette').style.opacity=0;
+}
+
+// ---------- COLISÃO ----------
+function collides(x,z,r){
+  for(var i=0;i<colliders.length;i++){
+    var c=colliders[i];
+    var cx=Math.max(c.minX,Math.min(x,c.maxX));
+    var cz=Math.max(c.minZ,Math.min(z,c.maxZ));
+    if(Math.hypot(x-cx,z-cz)<r) return true;
+  }
+  if(Math.abs(x)>W/2-0.8||Math.abs(z)>D/2-0.8) return true;
+  return false;
+}
+
+// ---------- EFEITOS: shake / respiração ----------
+var shakeAmt=0;
+function shake(v){ shakeAmt=Math.min(1,shakeAmt+v); }
+var breathPhase=0;
+
+// ---------- GAME OVER / WIN ----------
+function die(msg){
+  if(player.dead||player.won) return;
+  player.dead=true;
+  scareSound('bang'); tone(60,1.5,0.3,'sawtooth',30);
+  document.exitPointerLock && document.exitPointerLock();
+  setTimeout(function(){
+    document.getElementById('hud').style.display='none';
+    document.getElementById('mobileUI').style.display='none';
+    var es=document.getElementById('endScreen'); es.style.display='flex';
+    var t=document.getElementById('endTitle'); t.textContent='VOCÊ MORREU'; t.className='gameover';
+    document.getElementById('finalScene').innerHTML='A criatura levou você para o escuro.<br><br><i>"'+msg+'"</i><br><br>Fusíveis: '+fuseCount+'/3';
+  },900);
+}
+function winGame(){
+  if(player.won) return;
+  player.won=true;
+  scareSound('power');
+  document.exitPointerLock && document.exitPointerLock();
+  var es=document.getElementById('endScreen'); es.style.display='flex';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('mobileUI').style.display='none';
+  var t=document.getElementById('endTitle'); t.textContent='VOCÊ ESCAPOU'; t.className='win';
+  document.getElementById('finalScene').innerHTML=
+    'A porta range e se abre. O ar frio da madrugada invade o corredor.<br>'+
+    'Atrás de você, as luzes do prédio se apagam uma a uma... e algo sussurra seu nome.<br><br>'+
+    '🌙 Você caminha até a estrada. Não olhe para trás.<br><br><b>FIM — obrigado por jogar.</b>';
+}
+
+// ---------- LOOP PRINCIPAL ----------
+initAudio();
+setObjective('<b>Encontre 3 fusíveis</b> <span id="objDetail">(0/3)</span>');
+toast('Encontre 3 fusíveis. Cuidado com o escuro...', 4200);
+
+var clock=new THREE.Clock();
+var elapsed=0, stepTimer=0, randSoundTimer=8, propTimer=12, flashFlickT=0;
+var fwdV=new THREE.Vector3();
+
+function animate(){
+  requestAnimationFrame(animate);
+  var dt=Math.min(clock.getDelta(),0.05);
+  elapsed+=dt;
+
+  // --- movimento ---
+  var run = keys['ShiftLeft']||keys['ShiftRight']||runHeld;
+  var speed = run?5.2:3.0;
+  if(run && (keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD']||Math.hypot(joy.x,joy.y)>0.2)){
+    player.stamina=Math.max(0,player.stamina-dt*0.12);
+    if(player.stamina<=0) speed=3.2;
+    breathPhase+=dt*9;
+  } else {
+    player.stamina=Math.min(1,player.stamina+dt*0.08);
+    breathPhase+=dt*2.2;
+  }
+  var ix=0,iz=0;
+  if(keys['KeyW'])iz-=1; if(keys['KeyS'])iz+=1; if(keys['KeyA'])ix-=1; if(keys['KeyD'])ix+=1;
+  ix+=joy.x; iz+=joy.y;
+  var il=Math.hypot(ix,iz); if(il>1){ix/=il;iz/=il;}
+  // forward = -Z rotacionado por yaw ; right = +X rotacionado
+  var fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+  var rx=Math.cos(player.yaw), rz=-Math.sin(player.yaw);
+  var mx = (fx*(-iz)+rx*ix)*speed*dt;
+  var mz = (fz*(-iz)+rz*ix)*speed*dt;
+  var nx=player.x+mx, nz=player.z+mz;
+  if(!collides(nx,player.z,0.35)) player.x=nx;
+  if(!collides(player.x,nz,0.35)) player.z=nz;
+
+  // passos
+  var moving=Math.hypot(ix,iz)>0.15;
+  if(moving && !player.dead){
+    stepTimer-=dt*(run?1.7:1);
+    if(stepTimer<=0){ footstep(run); stepTimer=0.55; }
+  }
+
+  // --- câmera + bob + respiração + shake ---
+  player.bob+=dt*(moving?(run?11:7):2);
+  var bobY=Math.sin(player.bob)*(moving?(run?0.055:0.035):0.008);
+  var breath=Math.sin(breathPhase)*(run?0.02:0.006);
+  shakeAmt=Math.max(0,shakeAmt-dt*1.4);
+  var shx=(Math.random()-0.5)*shakeAmt*0.12, shy=(Math.random()-0.5)*shakeAmt*0.12;
+  camera.position.set(player.x+shx, player.y+bobY+breath, player.z+shy);
+  camera.rotation.y=player.yaw+(Math.random()-0.5)*shakeAmt*0.03;
+  camera.rotation.x=player.pitch+(Math.random()-0.5)*shakeAmt*0.03;
+
+  // --- lanterna segue câmera ---
+  var dir=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);
+  flash.position.copy(camera.position);
+  flash.target.position.copy(camera.position).add(dir.multiplyScalar(8));
+  lampGlow.position.copy(camera.position).add(new THREE.Vector3(0,-0.1,0));
+  // bateria
+  if(flashOn && !player.dead){
+    battery=Math.max(0,battery-dt*(100/300)); // ~5 min
+    if(battery<=0){ flashOn=false; toast('A lanterna APAGOU. Ache uma bateria!',3500); }
+  }
+  flashFlickT+=dt;
+  var flick = 1 + Math.sin(flashFlickT*31)*0.03 + Math.sin(flashFlickT*57)*0.02;
+  if(battery<25) flick *= (0.8+Math.random()*0.35); // oscilação forte com bateria fraca
+  if(Math.random()<dt*0.02) flick*=0.4; // piscada aleatória
+  flash.intensity = flashOn ? 1.7*flick : 0;
+  lampGlow.intensity = flashOn?0.12:0;
+  // HUD bateria
+  var pct=Math.round(battery);
+  document.getElementById('batteryPct').textContent=pct+'%';
+  var bar=document.getElementById('batteryBar');
+  bar.style.width=pct+'%';
+  bar.className = pct<25?'low':'';
+  bar.id='batteryBar';
+
+  // --- lâmpadas piscando ---
+  for(var li=0;li<flickerLights.length;li++){
+    var fl=flickerLights[li]; fl.t+=dt;
+    if(powerOn && fl.mode!=='pulse'){ fl.light.intensity=fl.base; continue; }
+    if(fl.mode==='flicker'){
+      fl.light.intensity = (Math.sin(fl.t*13)+Math.sin(fl.t*41)>0.6)?fl.base*0.15:fl.base;
+    } else if(fl.mode==='unstable'){
+      fl.light.intensity = Math.random()<0.06?fl.base*0.1:fl.base*(0.85+Math.random()*0.25);
+    } else if(fl.mode==='pulse'){
+      fl.light.intensity = fl.base*(0.6+0.4*Math.sin(fl.t*4));
+    } else { fl.light.intensity=fl.base; }
+    if(fl.bulb) fl.bulb.color.setScalar(0.4+ (fl.light.intensity/fl.base)*0.6);
+  }
+
+  // --- sons aleatórios + sons atrás ---
+  randSoundTimer-=dt;
+  if(randSoundTimer<=0){
+    randSoundTimer=7+Math.random()*14;
+    var r=Math.random();
+    if(r<0.3) scareSound('whisper');
+    else if(r<0.5){ scareSound('bang'); shake(0.35); }
+    else if(r<0.7){ scareSound('behind'); shake(0.25); }
+    else noiseBurst(0.5,400,0.08);
+  }
+  // --- objetos que se movem sozinhos ---
+  propTimer-=dt;
+  if(propTimer<=0){
+    propTimer=9+Math.random()*14;
+    // move um prop próximo (mas não muito perto p/ não ser óbvio)
+    var cands=moveableProps.filter(function(p){
+      var d=Math.hypot(p.mesh.position.x-player.x,p.mesh.position.z-player.z);
+      return d>4&&d<16;
+    });
+    if(cands.length){
+      var p=cands[Math.floor(Math.random()*cands.length)];
+      p.mesh.position.x+= (Math.random()-0.5)*1.6;
+      p.mesh.position.z+= (Math.random()-0.5)*1.6;
+      p.mesh.rotation.y+=1;
+      noiseBurst(0.3,500,0.18,'lowpass');
+      if(Math.random()<0.3) shake(0.2);
+    }
+    // luz apaga/acende
+    if(flickerLights.length && Math.random()<0.5){
+      var rf=flickerLights[Math.floor(Math.random()*flickerLights.length)];
+      var old=rf.base; rf.base=0.05;
+      setTimeout(function(){rf.base=old;}, 600+Math.random()*1200);
+      noiseBurst(0.2,1400,0.1,'highpass');
+    }
+  }
+
+  // --- monstro ---
+  updateMonster(dt, elapsed);
+
+  // --- interação HUD ---
+  var n=findNearest();
+  var im=document.getElementById('interactMsg');
+  if(n && !player.dead && !player.won){
+    nearest=n;
+    im.style.display='block';
+    im.innerHTML = isMobile ? 'Toque em <span class="key">USAR</span> — '+n.it.text
+                            : 'PRESSIONE <span class="key">E</span> PARA INTERAGIR — '+n.it.text;
+  } else { nearest=null; im.style.display='none'; }
+
+  renderer.render(scene,camera);
+}
+animate();
+
+} // fim initGame
+})();
+</script>
+</body>
+</html>
